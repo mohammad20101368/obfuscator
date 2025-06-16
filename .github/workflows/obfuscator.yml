@@ -1,9 +1,5 @@
-name: Obfuscate and Commit
-
+name: 混淆当前版本源码
 on:
-    #push:
-    #    paths:
-    #        - '明文源码.js'
     workflow_dispatch:
 
 jobs:
@@ -17,17 +13,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js
+      - name: 使用 Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "16"
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm install -g javascript-obfuscator
 
-      - name: Obfuscate code
+      - name: 检查备份文件是否存在
         run: |
-          javascript-obfuscator 明文源码.js --output _worker.js \
+          if [ ! -f _worker.js.backup ]; then
+            echo "备份文件 _worker.js.backup 不存在，正在创建..."
+            cp _worker.js _worker.js.backup
+          fi
+
+      - name: 混淆代码
+        run: |
+          javascript-obfuscator _worker.js.backup --output _worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
@@ -41,14 +44,20 @@ jobs:
           --transform-object-keys true \
           --unicode-escape-sequence true
 
-      - name: Commit changes
+      - name: 提交更改
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add _worker.js
-          git commit -m "Obfuscate _worker.js" || echo "No changes to commit"
+          if git diff --cached --quiet _worker.js.backup; then
+            echo "_worker.js.backup 文件没有更改，跳过提交"
+          else
+            echo "_worker.js.backup 文件有更改，添加到提交"
+            git add _worker.js.backup
+          fi
+          git commit -m "混淆 _worker.js 文件并备份原文件" || echo "没有需要提交的更改"
 
-      - name: Push changes
+      - name: 推送更改
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
